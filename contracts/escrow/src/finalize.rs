@@ -115,12 +115,9 @@ impl Escrow {
             total_amount,
             funded_amount: contract.funded_amount,
             released_amount: contract.released_amount,
-            refundable_balance: crate::checked_available_balance(
-                contract.funded_amount,
-                contract.released_amount,
-                contract.refunded_amount,
-            )
-            .unwrap_or_else(|e| env.panic_with_error(e)),
+            refundable_balance: contract.funded_amount
+                - contract.released_amount
+                - contract.refunded_amount,
             released_milestone_count,
             milestones: milestone_summaries,
         }
