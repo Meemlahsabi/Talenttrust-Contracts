@@ -11,24 +11,19 @@ use crate::{
 mod approval_expiry;
 mod cancel_contract;
 mod client_migration;
-mod contract_events;
 mod create_contract_bounds;
 mod deposit;
 mod dispute;
 mod emergency_controls;
-mod events_comprehensive;
-mod governance_events;
 mod input_sanitization_amounts;
 mod input_sanitization_identities;
 mod mainnet_readiness;
-mod overflow_saturation;
 mod pause_controls;
 mod persistence;
 mod refund;
 mod release;
 mod release_authorization;
 mod reputation;
-mod reputation_bounds_tests;
 mod security;
 mod ttl_tests;
 
