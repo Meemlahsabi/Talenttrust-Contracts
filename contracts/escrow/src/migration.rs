@@ -1,5 +1,8 @@
 use crate::ttl::{read_if_live, remove_transient, store_with_ttl, PENDING_MIGRATION_TTL_LEDGERS};
-use crate::{Contract, ContractStatus, DataKey, Error, Escrow, EscrowError};
+use crate::{
+    Contract, ContractStatus, ContractV1, DataKey, Error, Escrow, EscrowError,
+    CONTRACT_STORAGE_SCHEMA_VERSION,
+};
 use soroban_sdk::{contracttype, Address, Env, Symbol};
 
 #[contracttype]
@@ -17,10 +20,87 @@ impl Escrow {
     }
 
     pub(crate) fn load_contract(env: &Env, contract_id: u32) -> Contract {
+        let version = Self::contract_schema_version(env, contract_id);
+        if version < CONTRACT_STORAGE_SCHEMA_VERSION {
+            return Self::migrate_contract_storage(env, contract_id, version);
+        }
         env.storage()
             .persistent()
             .get::<_, Contract>(&DataKey::Contract(contract_id))
             .unwrap_or_else(|| env.panic_with_error(Error::ContractNotFound))
+    }
+
+    /// Return the stored schema version for `contract_id`, defaulting to `1`
+    /// (the legacy, unversioned [`ContractV1`] layout) when no version marker
+    /// has ever been written for it.
+    pub(crate) fn contract_schema_version(env: &Env, contract_id: u32) -> u32 {
+        env.storage()
+            .persistent()
+            .get::<_, u32>(&DataKey::ContractSchemaVersion(contract_id))
+            .unwrap_or(1)
+    }
+
+    /// Upgrade a contract's persisted storage from `from_version` to
+    /// [`CONTRACT_STORAGE_SCHEMA_VERSION`], rewriting it in place and stamping
+    /// the schema version marker so subsequent reads take the fast path in
+    /// [`Self::load_contract`]. Idempotent: calling it again on an
+    /// already-current record is a no-op that simply re-reads the value.
+    ///
+    /// # Panics
+    /// Panics with `Error::ContractNotFound` if no record exists for
+    /// `contract_id` under any known layout.
+    pub(crate) fn migrate_contract_storage(
+        env: &Env,
+        contract_id: u32,
+        from_version: u32,
+    ) -> Contract {
+        if from_version >= CONTRACT_STORAGE_SCHEMA_VERSION {
+            return env
+                .storage()
+                .persistent()
+                .get::<_, Contract>(&DataKey::Contract(contract_id))
+                .unwrap_or_else(|| env.panic_with_error(Error::ContractNotFound));
+        }
+
+        // Only one legacy layout exists today (v1 -> v2). Extend this match
+        // with further arms as CONTRACT_STORAGE_SCHEMA_VERSION advances.
+        let migrated = match from_version {
+            1 => {
+                let legacy = env
+                    .storage()
+                    .persistent()
+                    .get::<_, ContractV1>(&DataKey::Contract(contract_id))
+                    .unwrap_or_else(|| env.panic_with_error(Error::ContractNotFound));
+                Contract {
+                    client: legacy.client,
+                    freelancer: legacy.freelancer,
+                    arbiter: legacy.arbiter,
+                    status: legacy.status,
+                    total_deposited: legacy.total_deposited,
+                    funded_amount: legacy.funded_amount,
+                    released_amount: legacy.released_amount,
+                    refunded_amount: legacy.refunded_amount,
+                    release_authorization: legacy.release_authorization,
+                    reputation_issued: false,
+                }
+            }
+            _ => env.panic_with_error(Error::ContractNotFound),
+        };
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Contract(contract_id), &migrated);
+        env.storage().persistent().set(
+            &DataKey::ContractSchemaVersion(contract_id),
+            &CONTRACT_STORAGE_SCHEMA_VERSION,
+        );
+
+        env.events().publish(
+            (Symbol::new(env, "contract_storage_migrated"), contract_id),
+            (from_version, CONTRACT_STORAGE_SCHEMA_VERSION),
+        );
+
+        migrated
     }
 
     pub(crate) fn require_migration_allowed(env: &Env, status: ContractStatus) {

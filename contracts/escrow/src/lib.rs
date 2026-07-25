@@ -80,10 +80,10 @@ pub use ttl::{ADMIN_ROTATION_MIN_DELAY_LEDGERS, PENDING_MIGRATION_TTL_LEDGERS};
 // `DisputeResolution` and `DisputeSplit` are defined once in `types.rs` and
 // re-exported here; `dispute.rs` uses them via `crate::DisputeResolution`.
 pub use types::{
-    Contract, ContractBounds, ContractStatus, ContractSummary, DataKey, DepositMode,
+    Contract, ContractBounds, ContractStatus, ContractSummary, ContractV1, DataKey, DepositMode,
     DisputeResolution, DisputeSplit, Error, GovernedParameters, Milestone, MilestoneApprovals,
     MilestoneSummary, PendingAdminProposal, ReadinessChecklist, ReleaseAuthorization, Reputation,
-    SplitAmounts, CONTRACT_SUMMARY_SCHEMA_VERSION,
+    SplitAmounts, CONTRACT_STORAGE_SCHEMA_VERSION, CONTRACT_SUMMARY_SCHEMA_VERSION,
 };
 
 // Maximum bounds constants - re-export from amount_validation for API visibility
@@ -1199,12 +1199,12 @@ impl Escrow {
     }
 
     /// Retrieves contract information.
+    ///
+    /// Transparently upgrades records still stored in a pre-`reputation_issued`
+    /// legacy layout (schema version 1) to the current [`Contract`] layout on
+    /// read; see `migration::migrate_contract_storage`.
     pub fn get_contract(env: Env, contract_id: u32) -> Contract {
-        let contract = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Contract(contract_id))
-            .unwrap_or_else(|| env.panic_with_error(Error::ContractNotFound));
+        let contract = Self::load_contract(&env, contract_id);
 
         // Extend TTL on contract read
         ttl::extend_contract_ttl(&env, contract_id);

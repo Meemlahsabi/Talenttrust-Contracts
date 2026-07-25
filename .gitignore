@@ -8,6 +8,7 @@ contracts/**/.soroban/
 **/snapshots/
 .cargo/
 
+temp_auto_push.bat
 # Coverage output
 coverage_summary.txt
 lcov.info
@@ -19,3 +20,5 @@ lcov.info
 # Transient PR drafting artifacts
 PR_DESCRIPTION.md
 PULL_REQUEST.md
+.gitignore
+branch_structure.json

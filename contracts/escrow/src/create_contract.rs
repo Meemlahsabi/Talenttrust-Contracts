@@ -1,6 +1,7 @@
 use crate::{
     amount_validation, ttl, Contract, ContractStatus, DataKey, Error, Escrow, EscrowArgs,
-    EscrowClient, EscrowError, GovernedParameters, Milestone, ReleaseAuthorization, MAX_MILESTONES,
+    EscrowClient, EscrowError, GovernedParameters, Milestone, ReleaseAuthorization,
+    CONTRACT_STORAGE_SCHEMA_VERSION, MAX_MILESTONES,
 };
 use soroban_sdk::{contractimpl, symbol_short, Address, Env, Symbol, Vec};
 
@@ -136,6 +137,12 @@ impl Escrow {
         env.storage()
             .persistent()
             .set(&DataKey::Contract(id), &contract);
+        // New contracts are always written in the current layout, so stamp the
+        // schema version marker now and skip the migration-on-read path.
+        env.storage().persistent().set(
+            &DataKey::ContractSchemaVersion(id),
+            &CONTRACT_STORAGE_SCHEMA_VERSION,
+        );
 
         // Build and persist the milestone vector.
         let mut milestone_vec: Vec<Milestone> = Vec::new(&env);

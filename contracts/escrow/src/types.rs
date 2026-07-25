@@ -5,6 +5,32 @@ use soroban_sdk::{contracterror, contracttype, Address, String, Vec};
 #[allow(dead_code)]
 pub const CONTRACT_SUMMARY_SCHEMA_VERSION: u32 = 1;
 
+// ── Contract storage schema versioning ───────────────────────────────────────
+
+/// Current on-chain layout version for the [`Contract`] record stored under
+/// `DataKey::Contract(id)`. Bump this and add a migration arm in
+/// `migration::migrate_contract_storage` whenever a field is added to or
+/// removed from [`Contract`].
+pub const CONTRACT_STORAGE_SCHEMA_VERSION: u32 = 2;
+
+/// Layout of [`Contract`] as it existed before `reputation_issued` was added
+/// (schema version 1). Contracts created by older deployments may still be
+/// stored in this shape; `migration::migrate_contract_storage` upgrades them
+/// to the current [`Contract`] layout on first read.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractV1 {
+    pub client: Address,
+    pub freelancer: Address,
+    pub arbiter: Option<Address>,
+    pub status: ContractStatus,
+    pub total_deposited: i128,
+    pub funded_amount: i128,
+    pub released_amount: i128,
+    pub refunded_amount: i128,
+    pub release_authorization: ReleaseAuthorization,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MilestoneSummary {
@@ -66,6 +92,7 @@ pub enum DataKey {
     Emergency,
     // Contract storage
     Contract(u32),
+    ContractSchemaVersion(u32),
     NextContractId,
     MilestoneReleased(u32, u32),
     MilestoneApprovals(u32, u32),
